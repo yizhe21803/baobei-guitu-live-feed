@@ -94,6 +94,10 @@ def parse_list(source: bytes, category: str, page: int) -> list[dict]:
         reg,name=t.groups()
         name=normalize(name,80)
         if not name: continue
+        # Some source owners explicitly require non-redistribution or
+        # further verification. Do not publish those records in our feed.
+        if any(flag in name for flag in ("禁止转发", "需核实后反馈", "暂勿转发")):
+            continue
         img=card.select_one(".img-box img")
         photo=None
         if img:
@@ -155,6 +159,9 @@ def fetch_detail(entry: dict) -> tuple[str,dict|None,str]:
             details=parse_detail(data)
             if details is None:
                 return entry["id"],None,"removed_or_changed"
+            summary = details.get("feature_summary", "")
+            if any(flag in summary for flag in ("禁止转发", "请勿转发", "不得转发", "不允许转发", "需核实后反馈")):
+                return entry["id"],None,"restricted"
             return entry["id"],details,"ok"
         except HTTPError as e:
             if e.code in (404,410):
