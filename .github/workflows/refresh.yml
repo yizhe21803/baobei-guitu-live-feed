@@ -1,0 +1,51 @@
+name: Refresh official public case feed
+
+on:
+  schedule:
+    # Twice daily UTC. Source requests are rate-limited.
+    - cron: '17 0,12 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: guitulive-pages
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install parser
+        run: python -m pip install 'beautifulsoup4==4.14.2'
+      - name: Fetch and validate all official list and details pages
+        run: python scripts/sync_official.py --pages 20 --workers 4 --output site/data/latest.json
+      - name: Check publication invariant
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          feed=json.loads(Path("site/data/latest.json").read_text())
+          assert feed["complete"] is True
+          assert len(feed["records"]) >= 1100
+          assert feed["portrait_count"] >= 1
+          assert not any("http://" in str(x.get("portrait_file")) for x in feed["records"])
+          print("VALIDATED",len(feed["records"]),feed["fetched_at"])
+          PY
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deploy
+        uses: actions/deploy-pages@v4
