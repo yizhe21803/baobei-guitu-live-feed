@@ -120,7 +120,12 @@ def clean_detail(raw: str, field: str) -> str:
         # Constrain publicly indexed location to prefecture-level district;
         # never publish building/door details from third-party sources.
         value=re.split(r"(?:\d+号|\d+栋|\d+单元|\d+室|\d+楼|门牌|详细地址)",value,1)[0]
-        value=value[:90].strip(" ,，、")
+        # Remove literal JavaScript placeholder components without altering
+        # the valid province/city/district information.
+        components = [part.strip() for part in re.split(r"[,，、]", value)]
+        components = [part for part in components
+                      if part and part.casefold() not in {"undefined", "null", "none", "nan"}]
+        value="，".join(components)[:90]
     if field in ("birth_date","missing_date","registration_date"):
         m=DATER.search(value)
         return m.group() if m else ""
